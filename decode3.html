@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Crypto AES Encryption</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #0e0e0e;
+      color: #fff;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    h2 {
+      font-size: 24px;
+      color: #00ff99;
+      margin-bottom: 20px;
+    }
+    textarea {
+      width: 80%;
+      height: 120px;
+      margin: 10px;
+      padding: 10px;
+      font-size: 16px;
+      background-color: #222;
+      border: 1px solid #444;
+      color: #fff;
+      border-radius: 5px;
+    }
+    button {
+      background-color: #00ff99;
+      color: #0e0e0e;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 10px;
+      border-radius: 5px;
+    }
+    button:hover {
+      background-color: #00cc7a;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #111;
+      border-radius: 15px;
+      box-shadow: 0px 0px 20px rgba(0, 255, 153, 0.2);
+    }
+    .buttons {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .buttons button {
+      margin: 5px;
+    }
+    .output-container {
+      margin-top: 30px;
+    }
+    #statusMessage {
+      font-size: 16px;
+      color: #00ff99;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Secure AES Encryption/Decryption</h2>
+
+    <!-- Input Text Area -->
+    <textarea id="inputText" placeholder="Enter text to encrypt..." rows="5"></textarea><br>
+
+    <!-- File Upload -->
+    <input type="file" id="fileInput" accept=".txt"><br><br>
+
+    <!-- Buttons for Encode, Decode, Copy, Paste -->
+    <div class="buttons">
+      <button id="pasteBtn">Paste</button>
+      <button id="encryptBtn">Encrypt</button>
+      <button id="decryptBtn">Decrypt</button>
+      <button id="clearBtn">Clear</button>
+      <button id="downloadBtn">Download Encrypted</button>
+    </div>
+
+    <!-- Output Text Area -->
+    <div class="output-container">
+      <textarea id="outputText" placeholder="Encrypted or Decrypted output" readonly rows="5"></textarea><br>
+      <button id="copyBtn">Copy Output</button>
+    </div>
+
+    <!-- Status Message -->
+    <div id="statusMessage"></div>
+  </div>
+
+  <script>
+    // Generate a secret key for AES-GCM encryption
+    async function generateKey() {
+      return await crypto.subtle.generateKey(
+        {
+          name: "AES-GCM",
+          length: 256,
+        },
+        true,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    // Encrypt the message using AES-GCM
+    async function encryptMessage(key, message) {
+      const enc = new TextEncoder();
+      const encodedMessage = enc.encode(message);
+
+      // Generate a random initialization vector (IV)
+      const iv = crypto.getRandomValues(new Uint8Array(12)); // AES-GCM requires a 12-byte IV
+
+      // Encrypt the message
+      const encryptedData = await crypto.subtle.encrypt(
+        {
+          name: "AES-GCM",
+          iv: iv,
+        },
+        key,
+        encodedMessage
+      );
+
+      // Combine IV with encrypted data to allow decryption later
+      const combinedData = new Uint8Array(iv.length + encryptedData.byteLength);
+      combinedData.set(iv, 0);
+      combinedData.set(new Uint8Array(encryptedData), iv.length);
+
+      // Return the encrypted data as Base64 string
+      return btoa(String.fromCharCode.apply(null, combinedData));
+    }
+
+    // Decrypt the message using AES-GCM
+    async function decryptMessage(key, encryptedMessage) {
+      const combinedData = new Uint8Array(atob(encryptedMessage).split("").map(char => char.charCodeAt(0)));
+
+      // Extract the IV (first 12 bytes)
+      const iv = combinedData.slice(0, 12);
+      const encryptedData = combinedData.slice(12);
+
+      const decryptedData = await crypto.subtle.decrypt(
+        {
+          name: "AES-GCM",
+          iv: iv,
+        },
+        key,
+        encryptedData
+      );
+
+      const dec = new TextDecoder();
+      return dec.decode(decryptedData);
+    }
+
+    let encryptionKey;
+
+    // Handle the encryption button
+    document.getElementById("encryptBtn").addEventListener("click", async () => {
+      const message = document.getElementById("inputText").value;
+      if (message === "") {
+        alert("Please enter text to encrypt");
+        return;
+      }
+
+      // Generate AES key
+      encryptionKey = await generateKey();
+
+      // Encrypt the message
+      const encryptedMessage = await encryptMessage(encryptionKey, message);
+
+      // Display encrypted message
+      document.getElementById("outputText").value = encryptedMessage;
+      document.getElementById("statusMessage").textContent = "Message encrypted successfully!";
+    });
+
+    // Handle the decryption button
+    document.getElementById("decryptBtn").addEventListener("click", async () => {
+      const inputText = document.getElementById("inputText").value;
+      const encryptedMessage = document.getElementById("outputText").value;
+
+      let messageToDecrypt;
+      if (inputText) {
+        // If the input has text, we assume it's the encrypted message
+        messageToDecrypt = inputText;
+      } else if (encryptedMessage) {
+        // If the output has encrypted message, decrypt it
+        messageToDecrypt = encryptedMessage;
+      }
+
+      if (!messageToDecrypt || !encryptionKey) {
+        alert("Please provide valid encrypted text to decrypt.");
+        return;
+      }
+
+      // Decrypt the message
+      const decryptedMessage = await decryptMessage(encryptionKey, messageToDecrypt);
+
+      // Display decrypted message
+      document.getElementById("outputText").value = decryptedMessage;
+      document.getElementById("statusMessage").textContent = "Message decrypted successfully!";
+    });
+
+    // Handle the copy button
+    document.getElementById("copyBtn").addEventListener("click", () => {
+      const outputText = document.getElementById("outputText");
+      outputText.select();
+      document.execCommand("copy");
+      document.getElementById("statusMessage").textContent = "Output copied to clipboard!";
+    });
+
+    // Handle the paste button
+    document.getElementById("pasteBtn").addEventListener("click", () => {
+      navigator.clipboard.readText().then(text => {
+        document.getElementById("inputText").value = text;
+        document.getElementById("statusMessage").textContent = "Pasted text into input!";
+      });
+    });
+
+    // Handle the clear button
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      document.getElementById("inputText").value = "";
+      document.getElementById("outputText").value = "";
+      document.getElementById("statusMessage").textContent = "";
+    });
+
+    // Handle the file input for text document
+    document.getElementById("fileInput").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const text = await file.text();
+        document.getElementById("inputText").value = text;
+        document.getElementById("statusMessage").textContent = "File content loaded!";
+      }
+    });
+
+    // Handle the download button to save encrypted text
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      const encryptedMessage = document.getElementById("outputText").value;
+      if (!encryptedMessage) {
+        alert("No encrypted message to download.");
+        return;
+      }
+
+      const blob = new Blob([encryptedMessage], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "encrypted_message.txt";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
